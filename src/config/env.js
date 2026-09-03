@@ -14,8 +14,8 @@ export const env = {
   nodeEnv: getEnv('VITE_NODE_ENV', import.meta.env.MODE || 'development'),
 
   // Supabase Database & Auth Configuration
-  supabaseUrl: getEnv('VITE_SUPABASE_URL', ''),
-  supabaseAnonKey: getEnv('VITE_SUPABASE_ANON_KEY', ''),
+  supabaseUrl: getEnv('VITE_SUPABASE_URL', 'https://lcckowpksyaiwepyuiqu.supabase.co'),
+  supabaseAnonKey: getEnv('VITE_SUPABASE_ANON_KEY', 'sb_publishable_c_LANmo20c1IpAbl0EJLcA_LfcUJmbo'),
 
   // AI API Configuration (Secret keys used for AI Tutor services)
   geminiApiKey: getEnv('VITE_GEMINI_API_KEY', ''),
