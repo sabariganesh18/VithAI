@@ -4,7 +4,8 @@
  */
 
 const getEnv = (key, defaultValue = '') => {
-  return import.meta.env[key] !== undefined ? import.meta.env[key] : defaultValue;
+  const val = import.meta.env[key];
+  return (val && typeof val === 'string' && val.trim() !== '') ? val : defaultValue;
 };
 
 export const env = {
