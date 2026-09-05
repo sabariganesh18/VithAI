@@ -263,11 +263,31 @@ export function AuthProvider({ children }) {
 
   // Sync Supabase Auth listener & initial session retrieval
   useEffect(() => {
-    // 1. Initial URL check for tokens
     if (typeof window !== 'undefined') {
       const hash = window.location.hash;
       const search = window.location.search;
-      if (hash.includes('access_token') || search.includes('code=')) {
+      const searchParams = new URLSearchParams(search);
+      const code = searchParams.get('code');
+
+      // 1. Global PKCE Code exchange on any route
+      if (code && isSupabaseConfigured && supabase) {
+        supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+          if (!error && data?.session?.user) {
+            syncSupabaseProfile(data.session.user);
+            try {
+              window.history.replaceState(null, document.title, window.location.pathname);
+            } catch (e) {}
+            if (window.location.pathname === '/' || window.location.pathname === '/login' || window.location.pathname === '/auth/callback') {
+              window.location.replace('/dashboard');
+            }
+          }
+        }).catch((err) => {
+          console.warn('Global PKCE exchange notice:', err);
+        });
+      }
+
+      // 2. Clean hash tokens after parsing
+      if (hash.includes('access_token')) {
         setTimeout(() => {
           try {
             window.history.replaceState(null, document.title, window.location.pathname);
