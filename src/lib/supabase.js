@@ -6,14 +6,14 @@ const supabaseAnonKey = env.supabaseAnonKey;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-// Singleton Supabase Client with PKCE Auth & LocalStorage Persistence
+// Singleton Supabase Client with Implicit Flow to eliminate bad_oauth_state & state expiration across origins
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        flowType: 'pkce',
+        flowType: 'implicit',
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       }
     })
