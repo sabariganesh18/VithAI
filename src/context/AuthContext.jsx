@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext();
@@ -146,60 +146,100 @@ export function AuthProvider({ children }) {
     return defaultProfile;
   });
 
+  const syncSupabaseProfile = useCallback(async (authUser) => {
+    if (!authUser || !authUser.email) return;
+    const email = authUser.email.toLowerCase().trim();
+
+    let profile = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        profile = data;
+      } catch (e) {
+        // Fallback gracefully if database table is not initialized
+      }
+    }
+
+    const rawName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+    const computedName = profile?.full_name || (rawName.charAt(0).toUpperCase() + rawName.slice(1));
+    const avatarUrl = profile?.avatar || authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture;
+    const isAdmin = email.includes('admin');
+
+    const existing = getProfileForEmail(email) || {};
+
+    const updatedUser = {
+      ...existing,
+      id: authUser.id || existing.id || 'usr_' + Date.now(),
+      name: computedName,
+      email: email,
+      nativeLanguage: profile?.native_language || existing.nativeLanguage || 'ta',
+      learningCategory: profile?.learning_category || existing.learningCategory || 'both',
+      learningLanguage: profile?.learning_language || existing.learningLanguage || 'en',
+      codingLanguage: profile?.coding_language || existing.codingLanguage || 'python',
+      level: profile?.level || existing.level || 'beginner',
+      dailyGoalMins: profile?.daily_goal_mins || existing.dailyGoalMins || 20,
+      goalObjective: profile?.goal_objective || existing.goalObjective || 'vocabulary',
+      avatar: avatarUrl || existing.avatar || (isAdmin ? '👑' : '🎓'),
+      isAuthenticated: true,
+      isOnboarded: existing.isOnboarded !== undefined ? existing.isOnboarded : true,
+      isAdmin: isAdmin
+    };
+
+    setUser(updatedUser);
+    saveProfileForEmail(updatedUser);
+
+    // Clean OAuth tokens from browser URL
+    if (typeof window !== 'undefined' && (window.location.hash.includes('access_token') || window.location.search.includes('code='))) {
+      try {
+        window.history.replaceState(null, document.title, window.location.pathname);
+      } catch (e) {}
+    }
+  }, []);
+
   useEffect(() => {
     if (user && user.email) {
       saveProfileForEmail(user);
     }
   }, [user]);
 
-  // Sync Supabase Auth listener if Supabase is enabled
+  // Sync Supabase Auth listener & initial session retrieval
   useEffect(() => {
+    // 1. Initial URL check for tokens
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (hash.includes('access_token') || search.includes('code=')) {
+        setTimeout(() => {
+          try {
+            window.history.replaceState(null, document.title, window.location.pathname);
+          } catch (e) {}
+        }, 1200);
+      }
+    }
+
     if (!isSupabaseConfigured || !supabase) return;
+
+    // Direct session hydration on mount / reload
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncSupabaseProfile(session.user);
+      }
+    }).catch(err => {
+      console.warn('Session hydration notice:', err);
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const email = session.user.email;
-        let profile = null;
-        try {
-          const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          profile = data;
-        } catch (e) {
-          // Graceful fallback if database table is empty or offline
-        }
-
-        const rawName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || (email ? email.split('@')[0] : 'Learner');
-        const computedName = profile?.full_name || rawName.charAt(0).toUpperCase() + rawName.slice(1);
-        const avatarUrl = profile?.avatar || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
-        const isAdmin = email ? email.toLowerCase().includes('admin') : false;
-
-        const updatedUser = {
-          id: session.user.id,
-          name: computedName,
-          email: email,
-          nativeLanguage: profile?.native_language || 'ta',
-          learningCategory: profile?.learning_category || 'both',
-          learningLanguage: profile?.learning_language || 'en',
-          codingLanguage: profile?.coding_language || 'python',
-          level: profile?.level || 'beginner',
-          dailyGoalMins: profile?.daily_goal_mins || 20,
-          goalObjective: profile?.goal_objective || 'vocabulary',
-          avatar: avatarUrl || (isAdmin ? '👑' : '🎓'),
-          isAuthenticated: true,
-          isOnboarded: true,
-          isAdmin: isAdmin
-        };
-
-        setUser(updatedUser);
-        saveProfileForEmail(updatedUser);
+        syncSupabaseProfile(session.user);
       }
     });
 
     return () => subscription?.unsubscribe();
-  }, []);
+  }, [syncSupabaseProfile]);
 
   const login = async (email, password, displayName, customAvatar) => {
     const cleanEmail = email ? email.toLowerCase().trim() : 'sabari@vithai.edu';
