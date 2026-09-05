@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Sparkles, AlertCircle, ArrowRight, RefreshCw, CheckCircle2, UserCheck } from 'lucide-react';
+import { Sparkles, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,7 +11,6 @@ export default function AuthCallbackPage() {
 
   const [status, setStatus] = useState('processing'); // 'processing' | 'success' | 'error'
   const [errorMessage, setErrorMessage] = useState('');
-  const [errorCode, setErrorCode] = useState('');
   const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
@@ -19,19 +18,18 @@ export default function AuthCallbackPage() {
 
     async function handleAuthCallback() {
       try {
-        // 1. Check for URL Error Parameters (e.g. user cancelled, bad_oauth_state, etc.)
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const error = searchParams.get('error') || hashParams.get('error');
         const errCode = searchParams.get('error_code') || hashParams.get('error_code');
         const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
 
+        // 1. Check for explicit OAuth errors
         if (error || errCode) {
           console.error('[OAuth Callback Error]:', error, errCode, errorDescription);
           if (isMounted) {
             setStatus('error');
-            setErrorCode(errCode || error);
             if (errCode === 'bad_oauth_state' || errorDescription?.includes('bad_oauth_state')) {
-              setErrorMessage('OAuth state mismatch: The login started on one port but returned to another. Please update your Supabase Site URL to match your running frontend.');
+              setErrorMessage('OAuth State Mismatch: The login started on one port/domain but Supabase redirected to another. Please ensure your Supabase Dashboard Site URL matches your active domain.');
             } else {
               setErrorMessage(errorDescription || error || 'Google Authentication was cancelled or failed.');
             }
@@ -39,37 +37,46 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 2. Check for Direct Backend Query Tokens (if using express backend auth)
-        const directEmail = searchParams.get('email');
-        const directName = searchParams.get('name');
-        const directToken = searchParams.get('token');
+        // 2. PKCE Flow: Check for Authorization Code in URL search params (?code=...)
+        const code = searchParams.get('code');
+        if (code && isSupabaseConfigured && supabase) {
+          try {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) {
+              console.warn('PKCE exchange warning:', exchangeError);
+            } else if (data?.session?.user) {
+              const user = data.session.user;
+              const email = user.email || 'learner@vithai.edu';
+              const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
+              const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
-        if (directEmail && directToken) {
-          const derivedName = directName || directEmail.split('@')[0];
-          await login(directEmail, 'google_oauth_pass', derivedName, '🎓');
-          if (isMounted) {
-            setUserInfo({ name: derivedName, email: directEmail });
-            setStatus('success');
-            setTimeout(() => {
-              navigate('/dashboard', { replace: true });
-            }, 1000);
+              await login(email, 'google_oauth_pass', fullName, avatarUrl || '🎓');
+
+              if (isMounted) {
+                setUserInfo({ name: fullName, email });
+                setStatus('success');
+                // Clean URL params after successful session
+                try {
+                  window.history.replaceState(null, document.title, window.location.pathname);
+                } catch (e) {}
+                setTimeout(() => {
+                  navigate('/dashboard', { replace: true });
+                }, 800);
+              }
+              return;
+            }
+          } catch (e) {
+            console.warn('PKCE exception:', e);
           }
-          return;
         }
 
-        // 3. Check Supabase OAuth Session
+        // 3. Check for Direct Session in Supabase
         if (isSupabaseConfigured && supabase) {
-          // Allow Supabase JS to parse hash fragment / tokens
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-          if (sessionError) {
-            console.error('[Supabase Session Error]:', sessionError);
-            throw sessionError;
-          }
 
           if (session?.user) {
             const user = session.user;
-            const email = user.email || 'user@vithai.edu';
+            const email = user.email || 'learner@vithai.edu';
             const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
             const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
@@ -78,17 +85,19 @@ export default function AuthCallbackPage() {
             if (isMounted) {
               setUserInfo({ name: fullName, email });
               setStatus('success');
+              try {
+                window.history.replaceState(null, document.title, window.location.pathname);
+              } catch (e) {}
               setTimeout(() => {
                 navigate('/dashboard', { replace: true });
-              }, 1000);
+              }, 800);
             }
             return;
           }
         }
 
-        // 4. Fallback check from hash parameters if present
+        // 4. Implicit Flow: Check hash fragment for access_token
         const accessToken = hashParams.get('access_token');
-
         if (accessToken && isSupabaseConfigured && supabase) {
           const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
           if (!userError && user) {
@@ -98,15 +107,18 @@ export default function AuthCallbackPage() {
             if (isMounted) {
               setUserInfo({ name: fullName, email });
               setStatus('success');
+              try {
+                window.history.replaceState(null, document.title, window.location.pathname);
+              } catch (e) {}
               setTimeout(() => {
                 navigate('/dashboard', { replace: true });
-              }, 1000);
+              }, 800);
             }
             return;
           }
         }
 
-        // 5. If no active OAuth parameters found, check active session or set fallback
+        // 5. Fallback check: if already active in localStorage
         const timer = setTimeout(() => {
           if (isMounted) {
             const activeEmail = localStorage.getItem('vithai_active_email');
@@ -117,7 +129,7 @@ export default function AuthCallbackPage() {
               setErrorMessage('No active Google authentication session found. Please sign in again.');
             }
           }
-        }, 2200);
+        }, 2500);
 
         return () => clearTimeout(timer);
       } catch (err) {
@@ -135,11 +147,6 @@ export default function AuthCallbackPage() {
       isMounted = false;
     };
   }, [navigate, searchParams, login]);
-
-  const handleQuickLoginFallback = () => {
-    login('learner.google@vithai.edu', 'google_oauth_pass', 'Google Learner', '🎓');
-    navigate('/dashboard', { replace: true });
-  };
 
   return (
     <div className="min-vh-100 bg-light dark:bg-dark d-flex align-items-center justify-content-center p-3">
@@ -213,18 +220,17 @@ export default function AuthCallbackPage() {
               </div>
 
               <div className="d-flex flex-column gap-2">
-                <button
-                  type="button"
-                  onClick={handleQuickLoginFallback}
-                  className="btn btn-indigo rounded-4 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
-                >
-                  <UserCheck className="w-4 h-4" /> Continue to Dashboard
-                </button>
                 <Link
                   to="/login"
-                  className="btn btn-outline-secondary rounded-4 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2"
+                  className="btn btn-indigo rounded-4 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
                 >
-                  <RefreshCw className="w-4 h-4" /> Return to Login
+                  <RefreshCw className="w-4 h-4" /> Try Sign In Again
+                </Link>
+                <Link
+                  to="/"
+                  className="btn btn-light rounded-4 py-2.5 fw-bold text-muted"
+                >
+                  Return to Home
                 </Link>
               </div>
             </div>

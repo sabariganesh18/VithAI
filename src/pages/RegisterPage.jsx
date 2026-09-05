@@ -78,8 +78,34 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGoogleClick = () => {
-    setIsGoogleModalOpen(true);
+  const handleGoogleClick = async () => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        setIsLoading(true);
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent'
+            }
+          }
+        });
+        if (error) {
+          console.warn('Supabase OAuth notice:', error.message);
+          setIsGoogleModalOpen(true);
+        }
+        return;
+      } catch (err) {
+        console.warn('OAuth trigger exception:', err);
+        setIsGoogleModalOpen(true);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setIsGoogleModalOpen(true);
+    }
   };
 
   return (
