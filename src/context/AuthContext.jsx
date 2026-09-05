@@ -3,6 +3,24 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext();
 
+const parseJwt = (token) => {
+  if (!token) return null;
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 const PRESET_USER_PROFILES = {
   'admin@vithai.edu': {
     id: 'usr_admin',
@@ -136,6 +154,43 @@ const saveProfileForEmail = (userObj) => {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
+    // 0. Check for initial token in URL hash on first paint
+    if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const token = hashParams.get('access_token');
+        const jwtData = parseJwt(token);
+        if (jwtData && jwtData.email) {
+          const email = jwtData.email.toLowerCase().trim();
+          const rawName = jwtData.user_metadata?.full_name || jwtData.user_metadata?.name || email.split('@')[0];
+          const computedName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+          const avatarUrl = jwtData.user_metadata?.avatar_url || jwtData.user_metadata?.picture || '🎓';
+          const isAdmin = email.includes('admin');
+
+          const newUserProfile = {
+            id: jwtData.sub || 'usr_' + Date.now(),
+            name: computedName,
+            email: email,
+            nativeLanguage: 'ta',
+            learningCategory: 'both',
+            learningLanguage: 'en',
+            codingLanguage: 'python',
+            level: 'beginner',
+            dailyGoalMins: 20,
+            goalObjective: 'vocabulary',
+            avatar: avatarUrl,
+            joinedDate: new Date().toISOString().split('T')[0],
+            isAuthenticated: true,
+            isOnboarded: true,
+            isAdmin: isAdmin
+          };
+
+          saveProfileForEmail(newUserProfile);
+          return newUserProfile;
+        }
+      } catch (e) {}
+    }
+
     const activeEmail = localStorage.getItem('vithai_active_email');
     if (activeEmail) {
       const existingProfile = getProfileForEmail(activeEmail);
@@ -217,7 +272,7 @@ export function AuthProvider({ children }) {
           try {
             window.history.replaceState(null, document.title, window.location.pathname);
           } catch (e) {}
-        }, 1200);
+        }, 800);
       }
     }
 
