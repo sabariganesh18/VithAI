@@ -264,13 +264,12 @@ export function AuthProvider({ children }) {
   // Sync Supabase Auth listener & initial session retrieval
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const search = window.location.search;
       const hash = window.location.hash;
-      if (hash.includes('access_token')) {
-        setTimeout(() => {
-          try {
-            window.history.replaceState(null, document.title, window.location.pathname);
-          } catch (e) {}
-        }, 800);
+      if (search.includes('error=') || search.includes('error_code=') || hash.includes('access_token') || search.includes('code=')) {
+        try {
+          window.history.replaceState(null, document.title, window.location.pathname);
+        } catch (e) {}
       }
     }
 
