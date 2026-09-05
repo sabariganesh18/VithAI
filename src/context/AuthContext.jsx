@@ -265,28 +265,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash;
-      const search = window.location.search;
-      const searchParams = new URLSearchParams(search);
-      const code = searchParams.get('code');
-
-      // 1. Global PKCE Code exchange on any route
-      if (code && isSupabaseConfigured && supabase) {
-        supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
-          if (!error && data?.session?.user) {
-            syncSupabaseProfile(data.session.user);
-            try {
-              window.history.replaceState(null, document.title, window.location.pathname);
-            } catch (e) {}
-            if (window.location.pathname === '/' || window.location.pathname === '/login' || window.location.pathname === '/auth/callback') {
-              window.location.replace('/dashboard');
-            }
-          }
-        }).catch((err) => {
-          console.warn('Global PKCE exchange notice:', err);
-        });
-      }
-
-      // 2. Clean hash tokens after parsing
       if (hash.includes('access_token')) {
         setTimeout(() => {
           try {
@@ -310,6 +288,9 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         syncSupabaseProfile(session.user);
+        if (typeof window !== 'undefined' && window.location.pathname === '/auth/callback') {
+          window.location.replace('/dashboard');
+        }
       }
     });
 

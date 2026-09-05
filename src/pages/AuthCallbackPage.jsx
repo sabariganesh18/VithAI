@@ -15,137 +15,80 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     let isMounted = true;
+    let isHandled = false;
 
-    async function handleAuthCallback() {
-      try {
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const error = searchParams.get('error') || hashParams.get('error');
-        const errCode = searchParams.get('error_code') || hashParams.get('error_code');
-        const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
+    const error = searchParams.get('error') || new URLSearchParams(window.location.hash.substring(1)).get('error');
+    const errCode = searchParams.get('error_code') || new URLSearchParams(window.location.hash.substring(1)).get('error_code');
+    const errorDesc = searchParams.get('error_description') || new URLSearchParams(window.location.hash.substring(1)).get('error_description');
 
-        // 1. Check for explicit OAuth errors
-        if (error || errCode) {
-          console.error('[OAuth Callback Error]:', error, errCode, errorDescription);
-          if (isMounted) {
-            setStatus('error');
-            if (errCode === 'bad_oauth_state' || errorDescription?.includes('bad_oauth_state')) {
-              setErrorMessage('OAuth State Mismatch: The login started on one port/domain but Supabase redirected to another. Please ensure your Supabase Dashboard Site URL matches your active domain.');
-            } else {
-              setErrorMessage(errorDescription || error || 'Google Authentication was cancelled or failed.');
-            }
-          }
-          return;
-        }
-
-        // 2. PKCE Flow: Check for Authorization Code in URL search params (?code=...)
-        const code = searchParams.get('code');
-        if (code && isSupabaseConfigured && supabase) {
-          try {
-            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-            if (exchangeError) {
-              console.warn('PKCE exchange warning:', exchangeError);
-            } else if (data?.session?.user) {
-              const user = data.session.user;
-              const email = user.email || 'learner@vithai.edu';
-              const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
-              const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-
-              await login(email, 'google_oauth_pass', fullName, avatarUrl || '🎓');
-
-              if (isMounted) {
-                setUserInfo({ name: fullName, email });
-                setStatus('success');
-                // Clean URL params after successful session
-                try {
-                  window.history.replaceState(null, document.title, window.location.pathname);
-                } catch (e) {}
-                setTimeout(() => {
-                  navigate('/dashboard', { replace: true });
-                }, 800);
-              }
-              return;
-            }
-          } catch (e) {
-            console.warn('PKCE exception:', e);
-          }
-        }
-
-        // 3. Check for Direct Session in Supabase
-        if (isSupabaseConfigured && supabase) {
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-          if (session?.user) {
-            const user = session.user;
-            const email = user.email || 'learner@vithai.edu';
-            const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
-            const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-
-            await login(email, 'google_oauth_pass', fullName, avatarUrl || '🎓');
-
-            if (isMounted) {
-              setUserInfo({ name: fullName, email });
-              setStatus('success');
-              try {
-                window.history.replaceState(null, document.title, window.location.pathname);
-              } catch (e) {}
-              setTimeout(() => {
-                navigate('/dashboard', { replace: true });
-              }, 800);
-            }
-            return;
-          }
-        }
-
-        // 4. Implicit Flow: Check hash fragment for access_token
-        const accessToken = hashParams.get('access_token');
-        if (accessToken && isSupabaseConfigured && supabase) {
-          const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-          if (!userError && user) {
-            const email = user.email;
-            const fullName = user.user_metadata?.full_name || email.split('@')[0];
-            await login(email, 'google_oauth_pass', fullName, '🎓');
-            if (isMounted) {
-              setUserInfo({ name: fullName, email });
-              setStatus('success');
-              try {
-                window.history.replaceState(null, document.title, window.location.pathname);
-              } catch (e) {}
-              setTimeout(() => {
-                navigate('/dashboard', { replace: true });
-              }, 800);
-            }
-            return;
-          }
-        }
-
-        // 5. Fallback check: if already active in localStorage
-        const timer = setTimeout(() => {
-          if (isMounted) {
-            const activeEmail = localStorage.getItem('vithai_active_email');
-            if (activeEmail) {
-              navigate('/dashboard', { replace: true });
-            } else {
-              setStatus('error');
-              setErrorMessage('No active Google authentication session found. Please sign in again.');
-            }
-          }
-        }, 2500);
-
-        return () => clearTimeout(timer);
-      } catch (err) {
-        console.error('Failed to process OAuth callback:', err);
-        if (isMounted) {
-          setStatus('error');
-          setErrorMessage(err.message || 'An unexpected error occurred during Google sign in.');
-        }
+    if (error || errCode) {
+      if (isMounted) {
+        setStatus('error');
+        setErrorMessage(errorDesc || error || 'Google Authentication error occurred.');
       }
+      return;
     }
 
-    handleAuthCallback();
+    const handleAuthenticatedUser = async (user) => {
+      if (isHandled || !isMounted || !user) return;
+      isHandled = true;
 
-    return () => {
-      isMounted = false;
+      const email = user.email || 'learner@vithai.edu';
+      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0];
+      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || '🎓';
+
+      await login(email, 'google_oauth_pass', fullName, avatarUrl);
+
+      if (isMounted) {
+        setUserInfo({ name: fullName, email });
+        setStatus('success');
+        try {
+          window.history.replaceState(null, document.title, window.location.pathname);
+        } catch (e) {}
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 500);
+      }
     };
+
+    if (isSupabaseConfigured && supabase) {
+      // 1. Check existing session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user && !isHandled) {
+          handleAuthenticatedUser(session.user);
+        }
+      });
+
+      // 2. Listen to auth state change (fires automatically after code exchange)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user && !isHandled) {
+          handleAuthenticatedUser(session.user);
+        }
+      });
+
+      const timer = setTimeout(() => {
+        if (isMounted && !isHandled) {
+          const activeEmail = localStorage.getItem('vithai_active_email');
+          if (activeEmail) {
+            navigate('/dashboard', { replace: true });
+          } else {
+            setStatus('error');
+            setErrorMessage('Authentication session timed out. Please try signing in again.');
+          }
+        }
+      }, 4000);
+
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+        subscription?.unsubscribe();
+      };
+    } else {
+      const activeEmail = localStorage.getItem('vithai_active_email');
+      if (activeEmail) {
+        navigate('/dashboard', { replace: true });
+      }
+    }
   }, [navigate, searchParams, login]);
 
   return (
@@ -180,10 +123,10 @@ export default function AuthCallbackPage() {
                 </div>
               </div>
               <h4 className="fw-black text-dark dark:text-white mb-2">
-                Verifying Google Account...
+                Signing in with Google...
               </h4>
               <p className="text-muted small mb-0 px-3">
-                Securely connecting and syncing your learning profile. You will be redirected shortly.
+                Connecting your Google account and preparing your dashboard.
               </p>
             </div>
           )}
@@ -201,7 +144,7 @@ export default function AuthCallbackPage() {
                 Signed in with <strong>{userInfo?.email}</strong>
               </p>
               <div className="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill fw-bold">
-                Redirecting to your Learning Dashboard...
+                Opening Dashboard...
               </div>
             </div>
           )}
@@ -213,10 +156,10 @@ export default function AuthCallbackPage() {
                 <AlertCircle className="w-8 h-8" />
               </div>
               <h4 className="fw-black text-dark dark:text-white mb-2">
-                Authentication Notice
+                Sign In Notice
               </h4>
               <div className="alert alert-danger border-0 rounded-4 text-start small mb-4 p-3">
-                <strong>Error details:</strong> {errorMessage}
+                <strong>Details:</strong> {errorMessage}
               </div>
 
               <div className="d-flex flex-column gap-2">
@@ -224,13 +167,13 @@ export default function AuthCallbackPage() {
                   to="/login"
                   className="btn btn-indigo rounded-4 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
                 >
-                  <RefreshCw className="w-4 h-4" /> Try Sign In Again
+                  <RefreshCw className="w-4 h-4" /> Return to Login
                 </Link>
                 <Link
                   to="/"
                   className="btn btn-light rounded-4 py-2.5 fw-bold text-muted"
                 >
-                  Return to Home
+                  Home
                 </Link>
               </div>
             </div>
