@@ -22,26 +22,13 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
     setIsSigningIn(true);
     setSelectedAccEmail(account.email);
 
-    // Silent background sync with Supabase if available
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-            skipBrowserRedirect: true
-          }
-        }).catch(() => {});
-      } catch (err) {}
-    }
-
     setTimeout(() => {
       login(account.email, 'google_oauth_pass', account.name, account.avatarEmoji);
       setIsSigningIn(false);
       if (onSuccess) {
         onSuccess();
       }
-    }, 400);
+    }, 300);
   };
 
   const handleCustomGoogleSubmit = async (e) => {
