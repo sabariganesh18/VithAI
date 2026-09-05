@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import GoogleSignInModal from '../components/common/GoogleSignInModal';
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -16,16 +16,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (user && user.isAuthenticated && user.email) {
-      if (user.isAdmin || user.email.toLowerCase().includes('admin')) {
-        navigate('/admin', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
-    }
-  }, [user, navigate]);
 
   const validateEmail = (val) => {
     setEmail(val);

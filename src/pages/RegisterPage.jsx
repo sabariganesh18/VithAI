@@ -26,12 +26,6 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (user && user.isAuthenticated && user.email) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [user, navigate]);
-
   const handleEmailChange = (e) => {
     const val = e.target.value;
     setFormData({ ...formData, email: val });
