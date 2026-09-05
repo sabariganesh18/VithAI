@@ -7,7 +7,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import GoogleSignInModal from '../components/common/GoogleSignInModal';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { user, register } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -25,6 +25,12 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (user && user.isAuthenticated && user.email) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleEmailChange = (e) => {
     const val = e.target.value;
