@@ -159,15 +159,22 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const email = session.user.email;
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        let profile = null;
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          profile = data;
+        } catch (e) {
+          // Graceful fallback if database table is empty or offline
+        }
 
-        const fallbackName = session.user.user_metadata?.full_name || email.split('@')[0];
-        const computedName = profile?.full_name || fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
-        const isAdmin = email.toLowerCase().includes('admin');
+        const rawName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || (email ? email.split('@')[0] : 'Learner');
+        const computedName = profile?.full_name || rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        const avatarUrl = profile?.avatar || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
+        const isAdmin = email ? email.toLowerCase().includes('admin') : false;
 
         const updatedUser = {
           id: session.user.id,
@@ -180,7 +187,7 @@ export function AuthProvider({ children }) {
           level: profile?.level || 'beginner',
           dailyGoalMins: profile?.daily_goal_mins || 20,
           goalObjective: profile?.goal_objective || 'vocabulary',
-          avatar: profile?.avatar || (isAdmin ? '👑' : '🎓'),
+          avatar: avatarUrl || (isAdmin ? '👑' : '🎓'),
           isAuthenticated: true,
           isOnboarded: true,
           isAdmin: isAdmin

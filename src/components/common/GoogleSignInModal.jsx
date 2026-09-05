@@ -23,10 +23,11 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
     // Attempt Real Supabase Google OAuth if configured
     if (isSupabaseConfigured && supabase) {
       try {
+        const callbackTarget = `${window.location.origin}/auth/callback`;
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/dashboard`
+            redirectTo: callbackTarget
           }
         });
         if (!error) return;
@@ -51,10 +52,11 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        const callbackTarget = `${window.location.origin}/auth/callback`;
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/dashboard`
+            redirectTo: callbackTarget
           }
         });
         if (!error) return;

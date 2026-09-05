@@ -25,6 +25,7 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/daily-lesson" element={<DailyLessonPage />} />
