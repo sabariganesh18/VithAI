@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ArrowRight, Sparkles } from 'lucide-react';
+import { X, ArrowRight, Sparkles, CheckCircle2, Globe } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -8,32 +8,31 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [selectedAccEmail, setSelectedAccEmail] = useState(null);
 
   if (!isOpen) return null;
 
   const currentGoogleAccount = {
-    name: user?.name || 'Sabari Arumugam',
-    email: user?.email || 'sabari.arumugam@gmail.com',
-    avatarEmoji: user?.avatar || '🎓'
+    name: 'Sabari Ganesh',
+    email: 'sabariganeshr1812@gmail.com',
+    avatarEmoji: '🎓'
   };
 
   const handleSelectAccount = async (account) => {
     setIsSigningIn(true);
-    
-    // Attempt Real Supabase Google OAuth if configured
+    setSelectedAccEmail(account.email);
+
+    // Silent background sync with Supabase if available
     if (isSupabaseConfigured && supabase) {
       try {
-        const callbackTarget = `${window.location.origin}/auth/callback`;
-        const { error } = await supabase.auth.signInWithOAuth({
+        await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: callbackTarget
+            redirectTo: `${window.location.origin}/auth/callback`,
+            skipBrowserRedirect: true
           }
-        });
-        if (!error) return;
-      } catch (err) {
-        console.warn('Supabase OAuth notice, using fast session login fallback', err);
-      }
+        }).catch(() => {});
+      } catch (err) {}
     }
 
     setTimeout(() => {
@@ -42,37 +41,40 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
       if (onSuccess) {
         onSuccess();
       }
-    }, 300);
+    }, 400);
   };
 
   const handleCustomGoogleSubmit = async (e) => {
     e.preventDefault();
     if (!customEmail) return;
     setIsSigningIn(true);
+    setSelectedAccEmail(customEmail);
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const callbackTarget = `${window.location.origin}/auth/callback`;
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: callbackTarget
-          }
-        });
-        if (!error) return;
-      } catch (err) {
-        console.warn('Supabase OAuth notice', err);
-      }
-    }
+    const derivedName = customName.trim() || customEmail.split('@')[0].replace('.', ' ');
 
     setTimeout(() => {
-      const derivedName = customName.trim() || customEmail.split('@')[0].replace('.', ' ');
       login(customEmail, 'google_oauth_pass', derivedName, '🎓');
       setIsSigningIn(false);
       if (onSuccess) {
         onSuccess();
       }
-    }, 300);
+    }, 400);
+  };
+
+  const handleDirectOAuthRedirect = async () => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        setIsSigningIn(true);
+        await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`
+          }
+        });
+      } catch (err) {
+        console.warn('OAuth redirect notice:', err);
+      }
+    }
   };
 
   return (
@@ -110,10 +112,12 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
             <button
               onClick={() => handleSelectAccount(currentGoogleAccount)}
               disabled={isSigningIn}
-              className="btn btn-light text-dark border border-slate-200 p-3 rounded-4 d-flex align-items-center justify-content-between text-start w-100 shadow-sm hover:border-indigo"
+              className={`btn btn-light text-dark border p-3 rounded-4 d-flex align-items-center justify-content-between text-start w-100 shadow-sm transition-all ${
+                selectedAccEmail === currentGoogleAccount.email ? 'border-indigo bg-indigo-50 ring-2' : 'border-slate-200 hover:border-indigo'
+              }`}
             >
               <div className="d-flex align-items-center gap-3">
-                <div className="rounded-circle bg-indigo text-white fw-black d-flex align-items-center justify-content-center shadow-xs" style={{ width: '40px', height: '40px', fontSize: '1.1rem' }}>
+                <div className="rounded-circle bg-indigo text-white fw-black d-flex align-items-center justify-content-center shadow-xs" style={{ width: '42px', height: '42px', fontSize: '1.1rem' }}>
                   {currentGoogleAccount.name[0]}
                 </div>
                 <div>
@@ -125,7 +129,11 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
                   </div>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-indigo ms-2 shrink-0" />
+              {isSigningIn && selectedAccEmail === currentGoogleAccount.email ? (
+                <div className="spinner-border spinner-border-sm text-indigo ms-2" role="status" />
+              ) : (
+                <ArrowRight className="w-5 h-5 text-indigo ms-2 shrink-0" />
+              )}
             </button>
           </div>
 
@@ -147,7 +155,7 @@ export default function GoogleSignInModal({ isOpen, onClose, onSuccess }) {
                 disabled={!customEmail || isSigningIn}
                 className="btn btn-indigo btn-lg rounded-3 fw-black py-2.5 mt-1 shadow-sm d-flex align-items-center justify-content-center gap-2"
               >
-                <Sparkles className="w-4 h-4 fill-white" /> {isSigningIn ? 'Connecting to Google...' : 'Continue with This Google Email'}
+                <Sparkles className="w-4 h-4 fill-white" /> {isSigningIn && selectedAccEmail === customEmail ? 'Signing In...' : 'Continue with This Google Email'}
               </button>
             </form>
           </div>

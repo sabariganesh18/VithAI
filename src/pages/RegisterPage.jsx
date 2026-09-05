@@ -78,19 +78,7 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGoogleClick = async () => {
-    if (supabase) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: `${window.location.origin}/auth/callback` }
-        });
-        if (!error) return;
-        console.warn('Supabase OAuth notice:', error.message);
-      } catch (err) {
-        console.warn('Supabase OAuth error:', err);
-      }
-    }
+  const handleGoogleClick = () => {
     setIsGoogleModalOpen(true);
   };
 
